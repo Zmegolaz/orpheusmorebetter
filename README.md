@@ -58,6 +58,7 @@ tracker = https://home.opsfet.ch/
 api = https://orpheus.network/
 mode = both
 source = OPS
+log_dir = logs
 
 [qbittorrent]
 enable = false
@@ -103,6 +104,8 @@ If you have used `orpheusbetter`, `whatbetter`, or `redbetter`, this is an extre
 
  `source` is the source flag to add to created torrents. Leave blank if you are running `mktorrent` 1.0.
 
+`log_dir` is the directory where run log files are written (created if it doesn't exist). If the option is omitted entirely, logs default to a `logs/` directory in the current working directory. Set it to a path to write logs elsewhere, or set it to an empty value (`log_dir =`) or one of `none`/`off`/`false` to disable file logging completely, console output is unaffected either way.
+
 The optional `[qbittorrent]` section lets `orpheusmorebetter` add finished torrents straight to a running qBittorrent instance via its WebUI API, pointed at the transcode output so qBittorrent rechecks and starts seeding immediately. When this succeeds, the `.torrent` is *not* copied into `torrent_dir`; if it's disabled or the add fails, the tool falls back to the usual `torrent_dir` copy.
 
  - `enable` - set to `true` to turn on qBittorrent injection.
@@ -128,6 +131,7 @@ tracker = https://home.opsfet.ch/
 api = https://orpheus.network
 mode = both
 source = OPS
+log_dir = logs
 ```
 
 Usage

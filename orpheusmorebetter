@@ -58,6 +58,40 @@ def arg_to_candidate(api: whatapi.WhatAPI, arg: str) -> tuple[int, int]:
     return api.resolve_candidate(torrentid=torrentid)
 
 
+# Default directory for log files when `log_dir` is not set in the config.
+# Relative, so it lands in the current working directory (the historic behaviour).
+DEFAULT_LOG_DIR = "logs"
+
+# Values of `log_dir` that mean "don't write log files at all".
+LOG_DISABLED_VALUES = {"", "none", "off", "false", "no", "disable", "disabled"}
+
+
+def resolve_log_dir(config_path: str) -> str | None:
+    """Determine where log files should be written, based on the config file.
+
+    Returns the directory path to log into, or None to disable file logging.
+
+    - `log_dir` absent              -> DEFAULT_LOG_DIR (historic behaviour)
+    - `log_dir` set to a path       -> that path
+    - `log_dir` empty or a sentinel -> None (file logging disabled)
+
+    This is read before the main config parsing so that logging can be set up
+    first; a missing file/section simply falls back to the default.
+    """
+    parser = configparser.ConfigParser(interpolation=None)
+    try:
+        parser.read(config_path)
+    except (configparser.Error, OSError):
+        return DEFAULT_LOG_DIR
+
+    value = parser.get("orpheus", "log_dir", fallback=None)
+    if value is None:
+        return DEFAULT_LOG_DIR
+    if value.strip().lower() in LOG_DISABLED_VALUES:
+        return None
+    return os.path.expanduser(value.strip())
+
+
 def banner():
     return (
         "Torrent created with orpheusmorebetter version {0}. Maintained by walkrflocka\n"
@@ -112,9 +146,6 @@ def formats_needed(group: TorrentGroup, torrent: Torrent, requested_formats: set
 
 
 def main():
-    if not os.path.exists("logs/"):
-        os.mkdir("logs")
-
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter, prog="orpheusmorebetter"
     )
@@ -191,18 +222,28 @@ def main():
     else:
         level = logging.INFO
 
+    log_dir = resolve_log_dir(args.config)
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    if log_dir is not None:
+        os.makedirs(log_dir, exist_ok=True)
+        handlers.insert(
+            0,
+            logging.FileHandler(
+                os.path.join(log_dir, f"{datetime.now()}.txt"), mode="w"
+            ),
+        )
+
     logging.basicConfig(
         level=level,
         format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(f"logs/{str(datetime.now())}.txt", mode="w"),
-            logging.StreamHandler(),
-        ],
+        handlers=handlers,
     )
 
     logger = logging.getLogger("main")
 
     logger.info("Starting Up OrpheusMoreBetter...")
+    if log_dir is None:
+        logger.info("File logging is disabled (log_dir).")
 
     # Work with config files
     config = configparser.ConfigParser(interpolation=None)
@@ -228,6 +269,9 @@ def main():
         config.set("orpheus", "mode", "both")
         config.set("orpheus", "api", "https://orpheus.network/")
         config.set("orpheus", "source", "OPS")
+        # Where to write log files. Set to a path to relocate them, or leave
+        # empty (or set to "none"/"off") to disable file logging entirely.
+        config.set("orpheus", "log_dir", DEFAULT_LOG_DIR)
         # qBittorrent injection (optional). When enabled, finished torrents are
         # added straight to qBittorrent pointed at the transcode output instead
         # of being dropped into torrent_dir. Leave username/password blank if
